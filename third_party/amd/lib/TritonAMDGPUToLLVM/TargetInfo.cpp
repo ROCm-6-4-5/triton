@@ -203,8 +203,8 @@ bool TargetInfo::warpReduce(RewriterBase &rewriter, Location loc,
     return false;
 
   if (!llvm::is_contained(
-          {ISAFamily::VEGA20, ISAFamily::CDNA2, ISAFamily::CDNA3,
-           ISAFamily::CDNA4},
+          {ISAFamily::VEGA20, ISAFamily::CDNA1, ISAFamily::CDNA2,
+           ISAFamily::CDNA3, ISAFamily::CDNA4},
           getISAFamily())) {
     return false;
   }

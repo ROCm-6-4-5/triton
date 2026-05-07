@@ -219,6 +219,12 @@ template <typename Derived> struct MachineDescrImpl : MachineDescr {
       llvm::DenseMap<std::tuple<int64_t, int64_t, int64_t>, uint32_t>;
 };
 
+struct CDNA1Kind : public MachineDescrImpl<CDNA1Kind> {
+  static const inline MmaTable mmaTable{{{32, 32, 8}, 64}, {{16, 16, 16}, 32}};
+  static const inline uint32_t mmaIssueCycle{4};
+  static const inline uint32_t numLdsDataPaths{2};
+};
+
 struct CDNA2Kind : public MachineDescrImpl<CDNA2Kind> {
   static const inline MmaTable mmaTable{{{32, 32, 8}, 64}, {{16, 16, 16}, 32}};
   static const inline uint32_t mmaIssueCycle{4};
@@ -239,6 +245,9 @@ std::unique_ptr<MachineDescr> MachineDescr::get(StringRef arch) {
   }
   case AMD::ISAFamily::CDNA2: {
     return std::make_unique<MachineDescrImpl<CDNA2Kind>>();
+  }
+  case AMD::ISAFamily::CDNA1: {
+    return std::make_unique<MachineDescrImpl<CDNA1Kind>>();
   }
   default: {
     return nullptr;
