@@ -203,7 +203,8 @@ bool TargetInfo::warpReduce(RewriterBase &rewriter, Location loc,
     return false;
 
   if (!llvm::is_contained(
-          {ISAFamily::CDNA2, ISAFamily::CDNA3, ISAFamily::CDNA4},
+          {ISAFamily::VEGA20, ISAFamily::CDNA2, ISAFamily::CDNA3,
+           ISAFamily::CDNA4},
           getISAFamily())) {
     return false;
   }
@@ -470,6 +471,7 @@ void TargetInfo::storeOpAnnotation(triton::gpu::LocalStoreOp op,
 
 bool TargetInfo::supportsDirectToLdsLoadBitWidth(int bitWidth) const {
   switch (getISAFamily()) {
+  case ISAFamily::VEGA20:
   case ISAFamily::CDNA1:
   case ISAFamily::CDNA2:
   case ISAFamily::CDNA3:
