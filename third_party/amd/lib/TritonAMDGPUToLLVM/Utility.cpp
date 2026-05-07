@@ -141,9 +141,10 @@ static Value shuffleCommonImpl(Location loc, RewriterBase &rewriter,
     } else {
       if (!llvm::is_contained(
               {ISAFamily::VEGA20, ISAFamily::CDNA1, ISAFamily::CDNA2,
-               ISAFamily::CDNA3, ISAFamily::CDNA4},
+               ISAFamily::CDNA3, ISAFamily::CDNA4, ISAFamily::RDNA1,
+               ISAFamily::RDNA2, ISAFamily::RDNA3},
               isaFamily)) {
-        // DPP is supported for VEGA20/CDNA1/CDNA2/CDNA3/CDNA4 right now, so we
+        // DPP is supported for VEGA20/CDNA1-4/RDNA1-3 right now, so we
         // fallback to ds_swizzle for other architectures.
         //
         // This map facilates the butterfly shuffle pattern for a stride less

@@ -37,6 +37,11 @@ ISAFamily deduceISAFamily(llvm::StringRef arch) {
 }
 
 bool supportsVDot(llvm::StringRef arch) {
+  // gfx1011/12/13 (RDNA1) support v_dot instructions, but gfx1010 does not.
+  if (arch.startswith("gfx1011") || arch.startswith("gfx1012") ||
+      arch.startswith("gfx1013"))
+    return true;
+
   switch (deduceISAFamily(arch)) {
   case AMD::ISAFamily::VEGA20:
   case AMD::ISAFamily::CDNA1:

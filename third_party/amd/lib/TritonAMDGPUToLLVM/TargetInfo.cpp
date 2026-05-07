@@ -199,12 +199,13 @@ bool TargetInfo::warpReduce(RewriterBase &rewriter, Location loc,
                             unsigned numLaneToReduce,
                             unsigned interleave) const {
   auto b = TritonLLVMOpBuilder(loc, rewriter);
-  if (numLaneToReduce != 64)
+  if (numLaneToReduce != 64 && numLaneToReduce != 32)
     return false;
 
   if (!llvm::is_contained(
           {ISAFamily::VEGA20, ISAFamily::CDNA1, ISAFamily::CDNA2,
-           ISAFamily::CDNA3, ISAFamily::CDNA4},
+           ISAFamily::CDNA3, ISAFamily::CDNA4, ISAFamily::RDNA1,
+           ISAFamily::RDNA2, ISAFamily::RDNA3},
           getISAFamily())) {
     return false;
   }
@@ -255,9 +256,10 @@ bool TargetInfo::warpReduce(RewriterBase &rewriter, Location loc,
     // some cases, the lower-level compiler could merge them into single
     // instruction. For example, v_mov_dpp + max => v_max_dpp.
     //
-    // For gfx9, we have 64 threads per warp. These 64 threads are arranged
-    // into 4 rows, with each row being 16 threads. Each 16 threads are arranged
-    // further into 4 banks, with each bank being 4 threads. Overall it's in a
+    // For gfx9 (CDNA/VEGA), we have 64 threads per warp arranged into 4 rows
+    // of 16 threads. For gfx10/gfx11 (RDNA), we have 32 threads per warp
+    // arranged into 2 rows of 16 threads. In both cases, each 16 threads are
+    // arranged into 4 banks of 4 threads. Overall it's in a
     // (row, bank, thread) structure. When shuffling, we use row/bank mask to
     // indicate which row/bank to participate. Then modifier like row_shr and
     // row_bcast means exact data movement schemes. In the following
@@ -278,12 +280,15 @@ bool TargetInfo::warpReduce(RewriterBase &rewriter, Location loc,
     // Step 5: Broadcast lane 15 of each row to all the lanes of its next row.
     //     lane 16-31 = redux(lane 15, lane 16-31)
     //
-    // Step 6: Broadcast lane 31 to lane 32-63.
-    //     lane 32-63 = redux(lane 31, lane 32-63)
+    // Step 6: Broadcast lane 31 to lane 32-63 (64-lane) or to lane 0-15
+    //         (32-lane).
+    //     lane 32-63 = redux(lane 31, lane 32-63)   [64-lane]
+    //     lane 0-15  = redux(lane 31, lane 0-15)    [32-lane]
     //
-    // Now the reduction result is stored in lane 63.
+    // Now the reduction result is stored in lane 63 (64-lane) or lane 31
+    // (32-lane).
     //
-    // Step 7: Read the reduction result from lane 63 and broadcast with
+    // Step 7: Read the reduction result from the last lane and broadcast with
     // readlane.
 
     const int allRows = 0xf;
@@ -307,9 +312,13 @@ bool TargetInfo::warpReduce(RewriterBase &rewriter, Location loc,
     buf = createDppReduxOpWithBoundCtrl(valType, buf, 1 + dppCtrlRowShr,
                                         allRows, allBanks);
 
-    // row_bcast:15 row_mask:0xa
+    // Step 5: Broadcast lane 15 of row 0 to the next row(s).
+    // For 64 lanes, rows 1 and 3 receive the broadcast (0xa).
+    // For 32 lanes, only row 1 receives the broadcast (0x2).
+    int bcast15RowMask = (numLaneToReduce == 64) ? 0xa : 0x2;
     buf = createDppReduxOpWithBoundCtrl(
-        valType, buf, static_cast<uint32_t>(DppCtrl::BCAST15), 0xa, allBanks);
+        valType, buf, static_cast<uint32_t>(DppCtrl::BCAST15), bcast15RowMask,
+        allBanks);
 
     // row_bcast:31
     buf = createDppReduxOpWithBoundCtrl(valType, buf,
@@ -319,11 +328,12 @@ bool TargetInfo::warpReduce(RewriterBase &rewriter, Location loc,
     // Similarly, we need to cast data types for readlane instruction.
     Type actualType = castToAndSExtInt(rewriter, loc, buf, valType, 16);
 
-    // Get reduction result from lane 63
+    // Get reduction result from the last lane (63 for 64-lane, 31 for 32-lane)
+    int lastLane = (numLaneToReduce == 64) ? 63 : 31;
     std::string intrinsic = "llvm.amdgcn.readlane";
     Value result =
         LLVM::createLLVMIntrinsicCallOp(rewriter, loc, intrinsic, actualType,
-                                        ValueRange{buf, b.i32_val(63)})
+                                        ValueRange{buf, b.i32_val(lastLane)})
             ->getResult(0);
 
     result = truncAndCastFromInt(rewriter, loc, result, valType, 16);
